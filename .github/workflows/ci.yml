@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need tags for the version check
+
+      - name: ShellCheck
+        run: shellcheck bin/screenpath scripts/*.sh test/*.sh
+
+      - name: Syntax check
+        run: bash -n bin/screenpath
+
+      - name: Tests
+        run: ./test/run.sh
+
+      - name: Version consistency
+        run: ./scripts/check-version.sh
