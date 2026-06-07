@@ -25,3 +25,15 @@ jobs:
 
       - name: Version consistency
         run: ./scripts/check-version.sh
+
+  macos:
+    # Exercise the real runtime: macOS ships bash 3.2, which differs from Linux bash 5.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show bash version
+        run: /bin/bash --version | head -1
+      - name: Syntax check (bash 3.2)
+        run: /bin/bash -n bin/screenpath
+      - name: Tests (bash 3.2)
+        run: /bin/bash test/run.sh

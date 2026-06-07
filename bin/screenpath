@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 
 # Defaults (override with flags or environment variables)
 DIR="${SCREENPATH_DIR:-$HOME/Screenshots}"
@@ -167,9 +167,12 @@ EOF
 # GNU date supports %3N; macOS date does not, so fall back to perl (preinstalled).
 capture_ms() {
   local ms
-  ms="$(date +%3N 2>/dev/null)"
+  ms="$(date +%3N 2>/dev/null)"                 # GNU date
   case "$ms" in ''|*[!0-9]*) ms='' ;; esac
-  [ -z "$ms" ] && ms="$(perl -MTime::HiRes=time -e 'my $t=Time::HiRes::time; printf "%03d", ($t-int($t))*1000' 2>/dev/null)"
+  if [ -z "$ms" ]; then                          # macOS: try perl, then a random tiebreaker
+    ms="$(perl -MTime::HiRes=time -e 'my $t=Time::HiRes::time; printf "%03d", ($t-int($t))*1000' 2>/dev/null)"
+  fi
+  case "$ms" in ''|*[!0-9]*) ms="$(printf '%03d' "$(( RANDOM % 1000 ))")" ;; esac
   printf '%s' "$ms"
 }
 
@@ -199,6 +202,27 @@ update_link() {
   ln -sf "$src" "$link"
 }
 
+# Show a macOS notification (best-effort). The text is passed as an argv item,
+# never interpolated into the AppleScript source, so a filename containing quotes
+# can neither break the script nor inject `do shell script`.
+notify_copied() {
+  osascript - "$1" >/dev/null 2>&1 <<'APPLESCRIPT' || true
+on run argv
+  display notification (item 1 of argv) with title "screenpath" subtitle "Path copied to clipboard"
+end run
+APPLESCRIPT
+}
+
+# Copy an image file to the clipboard. Filename passed as argv (no interpolation).
+# Returns osascript's exit status so the caller can detect failure.
+copy_image() {
+  osascript - "$1" >/dev/null 2>&1 <<'APPLESCRIPT'
+on run argv
+  set the clipboard to (read (POSIX file (item 1 of argv)) as TIFF picture)
+end run
+APPLESCRIPT
+}
+
 # When sourced (e.g. by the test suite) stop here so only the helpers above load.
 if (return 0 2>/dev/null); then return 0; fi
 
@@ -209,18 +233,21 @@ if [ "${1:-}" = "install-raycast" ]; then
   exit $?
 fi
 
+need_value() { [ "$2" -ge 2 ] || { err "screenpath: $1 needs a value"; exit 2; }; }
+
+fmt_count=0 copy_count=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    -d|--dir)     DIR="${2:?--dir needs a value}"; shift 2 ;;
-    -p|--prefix)  PREFIX="${2:?--prefix needs a value}"; shift 2 ;;
+    -d|--dir)     need_value --dir "$#"; DIR=$2; shift 2 ;;
+    -p|--prefix)  need_value --prefix "$#"; PREFIX=$2; shift 2 ;;
     --tmp)        DIR="${TMPDIR:-/tmp}/screenpath"; shift ;;
     -w|--window)  MODE="window"; shift ;;
     -f|--full)    MODE="full"; shift ;;
-    -i|--image)   COPY="image"; shift ;;
-    -Q|--quote)   FORMAT="quote"; shift ;;
-    -u|--url)     FORMAT="url"; shift ;;
+    -i|--image)   COPY="image"; copy_count=$((copy_count + 1)); shift ;;
+    -Q|--quote)   FORMAT="quote"; fmt_count=$((fmt_count + 1)); shift ;;
+    -u|--url)     FORMAT="url"; fmt_count=$((fmt_count + 1)); shift ;;
     -l|--link)    LINK=1; shift ;;
-    -n|--no-clip) COPY="none"; shift ;;
+    -n|--no-clip) COPY="none"; copy_count=$((copy_count + 1)); shift ;;
     --notify)     NOTIFY=1; shift ;;
     --setup)      print_setup; exit 0 ;;
     -v|--version) print_version; exit 0 ;;
@@ -229,12 +256,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Reject contradictory flags rather than silently picking last-wins.
+if [ "$fmt_count" -gt 1 ]; then
+  err "screenpath: use only one of --quote / --url"; exit 2
+fi
+if [ "$copy_count" -gt 1 ]; then
+  err "screenpath: use only one of --image / --no-clip"; exit 2
+fi
+if [ "$COPY" = "image" ] && [ "$FORMAT" != "raw" ]; then
+  err "screenpath: --quote / --url do not apply to --image"; exit 2
+fi
+
 if ! command -v /usr/sbin/screencapture >/dev/null 2>&1; then
   err "screenpath: /usr/sbin/screencapture not found — this tool is macOS only."
   exit 1
 fi
 
 mkdir -p "$DIR" || { err "screenpath: cannot create directory: $DIR"; exit 1; }
+# Resolve to an absolute path so the saved location is deterministic (hotkey
+# launchers have an unpredictable cwd) and the file:// URL is well-formed.
+DIR="$(cd "$DIR" && pwd)" || { err "screenpath: cannot resolve directory: $DIR"; exit 1; }
 
 ts="$(date +%Y%m%d-%H%M%S)"
 file="$(pick_path "$DIR" "$PREFIX" "$ts")"
@@ -268,13 +309,13 @@ out="$(format_path "$file")"
 case "$COPY" in
   path)
     printf '%s' "$out" | pbcopy
-    if [ "$NOTIFY" = "1" ]; then
-      osascript -e "display notification \"$file\" with title \"screenpath\" subtitle \"Path copied to clipboard\"" >/dev/null 2>&1 || true
-    fi
+    if [ "$NOTIFY" = "1" ]; then notify_copied "$out"; fi
     ;;
   image)
-    osascript -e "set the clipboard to (read (POSIX file \"$file\") as TIFF picture)" \
-      || err "screenpath: failed to copy image to clipboard (path saved at $file)"
+    if ! copy_image "$file"; then
+      err "screenpath: failed to copy image to clipboard (path saved at $file)"
+      exit 1
+    fi
     ;;
   none)
     : ;;

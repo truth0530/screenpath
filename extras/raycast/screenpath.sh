@@ -17,9 +17,12 @@
 # @raycast.author truth0530
 # @raycast.authorURL https://github.com/truth0530
 
-# Use the brew-installed screenpath; fall back to PATH lookup.
+# Prefer screenpath on PATH; otherwise try the Homebrew prefix; else report clearly.
 if command -v screenpath >/dev/null 2>&1; then
   screenpath
+elif brew_prefix="$(brew --prefix 2>/dev/null)" && [ -x "$brew_prefix/bin/screenpath" ]; then
+  "$brew_prefix/bin/screenpath"
 else
-  "$(brew --prefix 2>/dev/null)/bin/screenpath"
+  echo "screenpath not found. Install: brew install truth0530/tap/screenpath" >&2
+  exit 1
 fi

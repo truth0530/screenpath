@@ -30,6 +30,13 @@ check "--version prints name and version" "$("$SP" --version)" "screenpath $VERS
 "$SP" --setup >/dev/null 2>&1; check "--setup exits 0"         "$?" "0"
 "$SP" --nope  >/dev/null 2>&1; check "unknown option exits 2"  "$?" "2"
 
+# missing option values and contradictory flags exit 2 (before any capture)
+"$SP" --dir          >/dev/null 2>&1; check "--dir without value exits 2"      "$?" "2"
+"$SP" --prefix       >/dev/null 2>&1; check "--prefix without value exits 2"   "$?" "2"
+"$SP" --quote --url  >/dev/null 2>&1; check "--quote + --url exits 2"          "$?" "2"
+"$SP" --image --no-clip >/dev/null 2>&1; check "--image + --no-clip exits 2"   "$?" "2"
+"$SP" --image --url  >/dev/null 2>&1; check "--image + --url exits 2"          "$?" "2"
+
 # --- install-raycast subcommand (pure file copy, no capture needed) ---
 "$SP" install-raycast >/dev/null 2>&1
 check "install-raycast with no dir exits 0" "$?" "0"
