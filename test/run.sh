@@ -144,5 +144,11 @@ check "--prefix with slash exits 2" "$?" "2"
 
 rm -rf "$stub" "$od"
 
+# --- shell completion sanity ---
+bash -c "source '$HERE/completions/screenpath.bash' && complete -p screenpath >/dev/null 2>&1"
+check "bash completion registers" "$?" "0"
+head -1 "$HERE/completions/_screenpath" | grep -q '#compdef screenpath'
+check "zsh completion has #compdef header" "$?" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

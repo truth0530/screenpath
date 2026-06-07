@@ -33,6 +33,8 @@ image-copy, bind `screenpath` to a different hotkey for the path-copy case.
 brew install truth0530/tap/screenpath
 ```
 
+Shell completions (bash + zsh) are installed automatically.
+
 ## Quick start
 
 ```sh
@@ -119,6 +121,10 @@ Run `screenpath --setup` to reprint these.
   silently copying nothing.
 - One auditable Bash file ([`bin/screenpath`](bin/screenpath)), no network, no
   telemetry. Homebrew may ask you to trust the tap (normal for non-core formulae).
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

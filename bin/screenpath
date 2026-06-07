@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 
 # Defaults (override with flags or environment variables)
 DIR="${SCREENPATH_DIR:-$HOME/Screenshots}"

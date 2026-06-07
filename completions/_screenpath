@@ -1,0 +1,29 @@
+#compdef screenpath
+# zsh completion for screenpath
+
+_screenpath() {
+  # `install-raycast <dir>`: complete a directory for the argument.
+  if (( CURRENT >= 2 )) && [[ ${words[2]} == install-raycast ]]; then
+    _files -/
+    return
+  fi
+
+  _arguments -s \
+    '(-d --dir)'{-d,--dir}'[Save screenshots here]:directory:_files -/' \
+    '(-p --prefix)'{-p,--prefix}'[Filename prefix]:prefix:' \
+    '--tmp[Save to a temp dir ($TMPDIR/screenpath)]' \
+    '(-w --window)'{-w,--window}'[Capture a window]' \
+    '(-f --full)'{-f,--full}'[Capture the whole screen]' \
+    '(-i --image)'{-i,--image}'[Copy the image instead of the path]' \
+    '(-Q --quote)'{-Q,--quote}'[Copy a shell-quoted path]' \
+    '(-u --url)'{-u,--url}'[Copy a file:// URL]' \
+    '(-l --link)'{-l,--link}'[Point a latest symlink at this shot]' \
+    "(-n --no-clip)"{-n,--no-clip}"[Don't touch the clipboard]" \
+    '--notify[Show a macOS notification]' \
+    '--setup[Print hotkey setup instructions]' \
+    '(-v --version)'{-v,--version}'[Print version]' \
+    '(-h --help)'{-h,--help}'[Show help]' \
+    '1:command:(install-raycast)'
+}
+
+_screenpath "$@"
