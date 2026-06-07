@@ -99,5 +99,50 @@ check "pick_path adds -3 on next collision" \
   "$(pick_path "$pd" shot 20260606-120000)" "$pd/shot-20260606-120000-3.png"
 rm -rf "$pd"
 
+# --- capture result handling, via a stubbed screencapture (no real capture) ---
+# Exercises the cancel / write-failure / empty-file / success branches and the
+# --full empty-array guard, none of which the rest of the suite can reach.
+stub="$(mktemp -d)"
+cat > "$stub/ok" <<'STUB'
+#!/bin/bash
+for a in "$@"; do f="$a"; done
+printf PNGDATA > "$f"
+STUB
+cat > "$stub/cancel" <<'STUB'
+#!/bin/bash
+exit 0
+STUB
+cat > "$stub/fail" <<'STUB'
+#!/bin/bash
+echo "screencapture: cannot write file" >&2
+exit 0
+STUB
+cat > "$stub/empty" <<'STUB'
+#!/bin/bash
+for a in "$@"; do f="$a"; done
+: > "$f"
+STUB
+chmod +x "$stub"/ok "$stub"/cancel "$stub"/fail "$stub"/empty
+od="$(mktemp -d)"
+
+p="$(SCREENPATH_SCREENCAPTURE="$stub/ok" "$SP" --full --no-clip --dir "$od" --prefix t)"; rc=$?
+check "capture success exits 0"          "$rc" "0"
+check "capture success prints a real path" "$( [ -n "$p" ] && [ -f "$p" ] && echo yes || echo no )" "yes"
+
+o="$(SCREENPATH_SCREENCAPTURE="$stub/cancel" "$SP" --full --no-clip --dir "$od")"; rc=$?
+check "cancel exits 0"        "$rc" "0"
+check "cancel prints nothing" "$o" ""
+
+SCREENPATH_SCREENCAPTURE="$stub/fail"  "$SP" --full --no-clip --dir "$od" >/dev/null 2>&1
+check "write-failure exits 1" "$?" "1"
+
+SCREENPATH_SCREENCAPTURE="$stub/empty" "$SP" --full --no-clip --dir "$od" >/dev/null 2>&1
+check "empty-file (permission) exits 1" "$?" "1"
+
+"$SP" --full --no-clip --dir "$od" --prefix "a/b" >/dev/null 2>&1
+check "--prefix with slash exits 2" "$?" "2"
+
+rm -rf "$stub" "$od"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

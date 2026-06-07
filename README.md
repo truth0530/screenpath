@@ -51,7 +51,7 @@ screenpath [options]
 
   -d, --dir DIR       Save screenshots here (default: ~/Screenshots, or $SCREENPATH_DIR)
   -p, --prefix NAME   Filename prefix (default: shot, or $SCREENPATH_PREFIX)
-      --tmp           Save to a temp dir ($TMPDIR) instead of ~/Screenshots
+      --tmp           Save to a temp dir ($TMPDIR/screenpath) instead of ~/Screenshots
   -w, --window        Capture a window instead of dragging a region
   -f, --full          Capture the whole screen (no selection)
   -i, --image         Copy the IMAGE to the clipboard instead of the path
@@ -76,16 +76,22 @@ screenpath [options]
 - **A fixed path** — `--link` (or `SCREENPATH_LINK`) keeps `latest.png` pointing at the
   newest shot, so you can just reference `~/latest.png` without pasting anything.
 - **No overwrites / cleanup** — filenames are timestamped (millisecond + counter on
-  collision); set `SCREENPATH_DIR`/`SCREENPATH_PREFIX`, or use `--tmp` for throwaway
-  shots. screenpath never deletes files.
+  collision); set `SCREENPATH_DIR`/`SCREENPATH_PREFIX`, or use `--tmp` (a `screenpath/`
+  subdir under `$TMPDIR`) for throwaway shots. screenpath never deletes files.
+- **Exit status** — `0` = path captured & printed (or selection cancelled, with empty
+  output); `1` = capture/clipboard/permission failure; `2` = usage error. In a script,
+  treat empty stdout as "nothing captured".
 
 ## Global hotkey
 
 macOS won't let a CLI self-bind a hotkey, so you bind one once. **Raycast** (smoothest):
 
 ```sh
-screenpath install-raycast ~/.config/raycast/scripts   # find the dir in Raycast settings
-# then assign a Hotkey to "Screenpath" in Raycast
+# 1. In Raycast: Settings → Extensions → Script Commands → Add Directories
+#    (Raycast has no default folder — it only scans directories you add.)
+# 2. Install into that exact directory:
+screenpath install-raycast <that-directory>
+# 3. Assign a Hotkey to "Screenpath" in Raycast.
 ```
 
 <details>
@@ -94,10 +100,10 @@ screenpath install-raycast ~/.config/raycast/scripts   # find the dir in Raycast
 **Shortcuts.app** — new shortcut → *Run Shell Script* → `screenpath` (use the full
 path from `which screenpath` if needed) → *Add Keyboard Shortcut*.
 
-**skhd**
+**skhd** (pick a chord that's free — `cmd+shift+5` is taken by macOS's own screenshot UI)
 ```sh
 brew install koekeishiya/formulae/skhd
-echo 'cmd + shift + 5 : screenpath' >> ~/.config/skhd/skhdrc
+echo 'cmd + shift + 6 : screenpath' >> ~/.config/skhd/skhdrc
 skhd --start-service
 ```
 

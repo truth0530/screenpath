@@ -11,7 +11,7 @@
 
 set -uo pipefail
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 
 # Defaults (override with flags or environment variables)
 DIR="${SCREENPATH_DIR:-$HOME/Screenshots}"
@@ -23,6 +23,8 @@ FORMAT="raw"    # raw | quote | url  (how the path is written to the clipboard)
 LINK="${SCREENPATH_LINK:+1}"; LINK="${LINK:-0}"
 # Quiet by default. Enable a macOS notification with --notify or SCREENPATH_NOTIFY=1.
 NOTIFY="${SCREENPATH_NOTIFY:+1}"; NOTIFY="${NOTIFY:-0}"
+# The capture binary (overridable for testing only).
+SCREENCAPTURE="${SCREENPATH_SCREENCAPTURE:-/usr/sbin/screencapture}"
 
 err() { printf '%s\n' "$*" >&2; }
 
@@ -41,7 +43,7 @@ USAGE:
 OPTIONS:
   -d, --dir DIR       Save screenshots here (default: ~/Screenshots, or $SCREENPATH_DIR)
   -p, --prefix NAME   Filename prefix (default: shot, or $SCREENPATH_PREFIX)
-      --tmp           Save to a temp dir ($TMPDIR) instead of ~/Screenshots
+      --tmp           Save to a temp dir ($TMPDIR/screenpath) instead of ~/Screenshots
   -w, --window        Capture a window instead of dragging a region
   -f, --full          Capture the whole screen (no selection)
   -i, --image         Copy the IMAGE to the clipboard instead of the path
@@ -60,6 +62,13 @@ screenshot tool (e.g. Shottr). The path is printed to stdout as well.
 
 If your screenshots folder contains spaces, use --quote so the pasted path stays
 a single shell argument, or --url for apps that expect a file:// URL.
+
+EXIT STATUS:
+  0  a path was captured and printed (clipboard updated unless --no-clip),
+     OR the user cancelled the selection (in which case nothing is printed)
+  1  a capture/clipboard/permission failure (message on stderr)
+  2  a usage error (unknown option, missing value, conflicting flags)
+A script can treat empty stdout as "nothing captured".
 EOF
 }
 
@@ -69,9 +78,11 @@ screenpath puts a `screenpath` command on your PATH, but a global hotkey must be
 bound by you — macOS does not let a CLI register one programmatically. Pick one:
 
 [1] Raycast (recommended — smoothest)
-    - Install the bundled script command into your Raycast scripts folder:
-        screenpath install-raycast <your-raycast-scripts-dir>
-      (find the folder in Raycast Settings > Extensions > Script Commands)
+    - In Raycast, register a Script Commands directory FIRST:
+        Settings > Extensions > Script Commands > Add Directories
+      (Raycast only scans directories you have added — there is no default.)
+    - Install the bundled command into that exact directory:
+        screenpath install-raycast <that-directory>
     - Then assign a Hotkey to "Screenpath" in Raycast.
 
 [2] macOS Shortcuts (built-in, no extra app)
@@ -141,10 +152,10 @@ install_raycast() {
     cat <<'EOF'
 Usage: screenpath install-raycast <raycast-scripts-dir>
 
-Find your Raycast Script Commands folder under:
-  Raycast Settings > Extensions > Script Commands  (it shows the directory)
-then re-run, for example:
-  screenpath install-raycast ~/.config/raycast/scripts
+Raycast has no default scripts folder — it only scans directories you add under
+  Raycast Settings > Extensions > Script Commands > Add Directories
+Add one there first, then pass that exact path, e.g.:
+  screenpath install-raycast ~/raycast-scripts
 
 After it is copied, open Raycast and assign a Hotkey to "Screenpath".
 EOF
@@ -267,15 +278,21 @@ if [ "$COPY" = "image" ] && [ "$FORMAT" != "raw" ]; then
   err "screenpath: --quote / --url do not apply to --image"; exit 2
 fi
 
-if ! command -v /usr/sbin/screencapture >/dev/null 2>&1; then
-  err "screenpath: /usr/sbin/screencapture not found — this tool is macOS only."
+# A prefix is a filename component, not a path — reject separators so it can't
+# escape $DIR ('../x') or point at a missing subdir ('sub/x').
+case "$PREFIX" in
+  */*) err "screenpath: --prefix / SCREENPATH_PREFIX must not contain '/'"; exit 2 ;;
+esac
+
+if ! command -v "$SCREENCAPTURE" >/dev/null 2>&1; then
+  err "screenpath: '$SCREENCAPTURE' not found — this tool is macOS only."
   exit 1
 fi
 
-mkdir -p "$DIR" || { err "screenpath: cannot create directory: $DIR"; exit 1; }
+mkdir -p -- "$DIR" || { err "screenpath: cannot create directory: $DIR"; exit 1; }
 # Resolve to an absolute path so the saved location is deterministic (hotkey
 # launchers have an unpredictable cwd) and the file:// URL is well-formed.
-DIR="$(cd "$DIR" && pwd)" || { err "screenpath: cannot resolve directory: $DIR"; exit 1; }
+DIR="$(cd -- "$DIR" && pwd)" || { err "screenpath: cannot resolve directory: $DIR"; exit 1; }
 
 ts="$(date +%Y%m%d-%H%M%S)"
 file="$(pick_path "$DIR" "$PREFIX" "$ts")"
@@ -284,14 +301,19 @@ file="$(pick_path "$DIR" "$PREFIX" "$ts")"
 case "$MODE" in
   region) args=(-i) ;;       # interactive drag-to-select
   window) args=(-i -W) ;;    # interactive, starting in window-selection mode
-  full)   args=() ;;         # entire screen, immediately
+  full)   args=(-m) ;;       # main display only -> exactly one predictable file
 esac
 
-/usr/sbin/screencapture ${args[@]+"${args[@]}"} "$file" || true
+# Capture stderr: screencapture exits 0 even when it fails to write, so we use
+# "no file + an error message" to tell a real failure from a user cancel.
+cap_err="$("$SCREENCAPTURE" ${args[@]+"${args[@]}"} "$file" 2>&1)"
 
-# Esc / cancel -> no file was written. Exit quietly without touching the clipboard.
 if [ ! -e "$file" ]; then
-  exit 0
+  if [ -n "$cap_err" ]; then
+    err "screenpath: capture failed: $cap_err"
+    exit 1
+  fi
+  exit 0   # user cancelled the selection — nothing captured
 fi
 
 # Zero-byte file -> capture failed, almost always missing Screen Recording permission.
@@ -308,7 +330,10 @@ out="$(format_path "$file")"
 
 case "$COPY" in
   path)
-    printf '%s' "$out" | pbcopy
+    if ! printf '%s' "$out" | pbcopy; then
+      err "screenpath: failed to copy to the clipboard (path saved at $file)"
+      exit 1
+    fi
     if [ "$NOTIFY" = "1" ]; then notify_copied "$out"; fi
     ;;
   image)
