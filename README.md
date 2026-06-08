@@ -14,6 +14,15 @@ in **tmux**, or with AI agents — there you reference a screenshot by its **fil
 It lives **alongside** your normal screenshot app — keep Shottr/CleanShot for
 image-copy, bind `screenpath` to a different hotkey for the path-copy case.
 
+**Why I made this.** I work in tmux and over SSH, and I kept wanting to show an AI
+agent (or another terminal tool) a screenshot — but you can't paste an image into a
+terminal; you need its *file path*, and macOS has no quick way to grab that. So this is
+deliberately tiny: **one ~350-line Bash file, no dependencies.** It has tests and CI not
+because it's complicated, but because you grant it Screen Recording permission — a tool
+like that should be auditable and boring (see [SECURITY.md](SECURITY.md)). It's a
+separate tool rather than a patch to an image-copier because the whole point is the
+*opposite* default: copy the path, not the image. Built with AI assistance.
+
 <details>
 <summary><b>Why not the built-in tools?</b></summary>
 
@@ -45,6 +54,21 @@ screenpath --setup    # how to bind a global hotkey
 ```
 
 To make it useful, bind a **global hotkey** (below).
+
+<details>
+<summary>Prefer a shell alias? (totally fair)</summary>
+
+The core really is one line — put this in your shell profile:
+
+```sh
+shot() { local f="$HOME/Screenshots/$(date +%Y%m%d-%H%M%S).png"
+         screencapture -i "$f" && [ -f "$f" ] && printf %s "$f" | pbcopy && echo "$f"; }
+```
+
+`screenpath` is that, plus the rough edges it skips: telling a real failure from a
+cancel, a Screen-Recording-permission check, collision-safe names, `--quote`/`--url`,
+window/full modes, a "latest" symlink, and shell completions.
+</details>
 
 ## Usage
 
@@ -86,7 +110,8 @@ screenpath [options]
 
 ## Global hotkey
 
-macOS won't let a CLI self-bind a hotkey, so you bind one once. **Raycast** (smoothest):
+macOS won't let *any* CLI bind its own global hotkey, so this is a one-time, ~30-second
+step (the same one every screenshot tool needs). **Raycast** is smoothest:
 
 ```sh
 # 1. In Raycast: Settings → Extensions → Script Commands → Add Directories
@@ -115,12 +140,14 @@ Run `screenpath --setup` to reprint these.
 ## Permissions & scope
 
 - **macOS only** — uses `screencapture`, `pbcopy`, `osascript`. Linux (`grim`/`slop` +
-  `wl-copy`) isn't supported yet; PRs welcome.
+  `wl-copy`) isn't supported yet; it's on the roadmap — see
+  [#1](https://github.com/truth0530/screenpath/issues/1) (PRs welcome).
 - The first capture needs **Screen Recording** permission (*System Settings → Privacy &
   Security*). An empty file means it's missing — screenpath tells you instead of
   silently copying nothing.
-- One auditable Bash file ([`bin/screenpath`](bin/screenpath)), no network, no
-  telemetry. Homebrew may ask you to trust the tap (normal for non-core formulae).
+- One auditable Bash file ([`bin/screenpath`](bin/screenpath)), **no network, no
+  telemetry** — details in [SECURITY.md](SECURITY.md). Homebrew may ask you to trust the
+  tap (normal for non-core formulae).
 
 ## Changes
 

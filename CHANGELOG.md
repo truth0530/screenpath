@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `SECURITY.md` (no network / no telemetry; what the tool does and doesn't do).
+- README "Why I made this" section and a "prefer a shell alias?" snippet.
+- Linux support tracked as an issue (#1).
+
 ## [0.1.3] - 2026-06-08
 
 ### Added
